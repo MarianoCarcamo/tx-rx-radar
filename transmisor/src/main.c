@@ -1,6 +1,7 @@
 /* Copyright 2024, Adan Lema <adanlema@hotmail.com> & Carcamo Mariano <mgcarcamo98@gmail.com> */
 
 /*==================[inclusions]=============================================*/
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -13,21 +14,15 @@
 #include <json-c/json.h>
 #include <unistd.h>
 #include "al_mapping.h"
+
 /*==================[macros and definitions]=================================*/
-// #define PRF  50
-// #define AB   5000
-// #define FREQ 10000000
 
 #define IP  "127.0.0.1"
 #define PORT 2000
+#define BUFF_SIZE 1024
 
-// #define BARKER7_CODE  0x72
-// #define BARKER7_NUM   0x7
-// #define BARKER11_CODE 0x0712
-// #define BARKER11_NUM  0xB
-// #define BARKER13_CODE 0x1F35
-// #define BARKER13_NUM  0xD
 /*==================[internal data declaration]==============================*/
+
 typedef struct {
     uint32_t prf;
     uint32_t ab; 
@@ -36,6 +31,7 @@ typedef struct {
     uint32_t code_num;
     uint32_t start;
 } params_s;
+
 /*==================[internal functions declaration]=========================*/
 
 /*==================[internal data definition]===============================*/
@@ -43,6 +39,7 @@ typedef struct {
 /*==================[external data definition]===============================*/
 
 /*==================[internal functions definition]==========================*/
+
 int str_to_json(char *str, params_s * params){
     struct json_object *parsed_json;
     struct json_object *prf;
@@ -102,10 +99,16 @@ void upload_config(addrs_t mem_p, params_s * config){
 int main() {
     struct sockaddr_in client, server;
     int lfd, confd, n;
-    char r_buff[1024] = "", s_buff[1024] = "";
+    char *r_buff, *s_buff;
 
     params_s sent_params = {0};
     params_s *sent_params_p = &sent_params;
+
+    r_buff = malloc(BUFF_SIZE);
+    s_buff = malloc(BUFF_SIZE);
+
+    memset(r_buff,0,BUFF_SIZE);
+    memset(s_buff,0,BUFF_SIZE);
 
     // Realiza mapeo de memoria
     // addrs_t addr_fpga = mapping_initialize(FPGA_ADDRS, FPGA_REG);
@@ -127,24 +130,28 @@ int main() {
     confd = accept(lfd, (struct sockaddr *)&client, &n);
 
     while(1){
-        recv(confd, r_buff, sizeof r_buff, 0);
+        recv(confd, r_buff, BUFF_SIZE, 0);
 
         if(str_to_json(r_buff, sent_params_p) == -1){
+            memset(s_buff,0,BUFF_SIZE);
             strcpy(s_buff,"{\"error\":\"Formato JSON no identificado\"}\n");
-            send(confd, s_buff, sizeof s_buff, 0);
+            send(confd, s_buff, BUFF_SIZE, 0);
         } else {
             // upload_config(addr_fpga, sent_params_p);
+            memset(s_buff,0,BUFF_SIZE);
             strcpy(s_buff,"{\"info\":\"Configuracion cargada con exito\"}\n");
-            send(confd, s_buff, sizeof s_buff, 0);
+            send(confd, s_buff, BUFF_SIZE, 0);
         }
 
+        memset(s_buff,0,BUFF_SIZE);
         sprintf(s_buff,"{\"prf\":%d, \"freq\":%d, \"ab\":%d, \"code\":%d, \"code-num\":%d, \"start\":%d}\n",sent_params_p->prf, sent_params_p->freq, sent_params_p->ab, sent_params_p->code, sent_params_p->code_num, sent_params_p->start);
 
-        send(confd, s_buff, sizeof s_buff, 0);
+        send(confd, s_buff, BUFF_SIZE, 0);
     }
 
     // mapping_finalize(addr_fpga, FPGA_REG);
-
+    free(r_buff);
+    free(s_buff);
     close(confd);
     close(lfd);
     return 0;
