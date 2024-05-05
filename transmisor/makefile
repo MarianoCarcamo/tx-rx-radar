@@ -23,7 +23,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	gcc -c $< -o $@ -lm
 
 $(BIN_DIR)/app.elf: $(OBJ_FILES) | $(BIN_DIR)
-	gcc -o $@ $(OBJ_FILES) -lm
+	gcc -o $@ $(OBJ_FILES) -lm -ljson-c
 
 all: $(BIN_DIR)/app.elf
 
