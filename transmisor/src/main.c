@@ -17,9 +17,16 @@
 
 /*==================[macros and definitions]=================================*/
 
-#define IP  "127.0.0.1"
-#define PORT 2000
-#define BUFF_SIZE 1024
+#define IP          "127.0.0.1"
+#define PORT        2000
+#define BUFF_SIZE   1024
+
+#define DEFAULT_AB          5000  
+#define DEFAULT_CODE        1810  
+#define DEFAULT_CODE_NUM    11   
+#define DEFAULT_FREQ        10000000   
+#define DEFAULT_PRF         50     
+#define DEFAULT_START       0   
 
 /*==================[internal data declaration]==============================*/
 
@@ -76,7 +83,7 @@ int str_to_json(char *str, params_s * params){
     }
 }
 
-void upload_config(addrs_t mem_p, params_s * config){
+void set_config(addrs_t mem_p, params_s * config){
     /*  Variables por defecto */
     uint32_t prt_value   = ceil(122880000 / config->prf);
     uint32_t phase_value = ceil((config->freq * 1e9) / 28610229);
@@ -94,64 +101,116 @@ void upload_config(addrs_t mem_p, params_s * config){
     mem_p[OFFSET_START]  = config->start;
 }
 
+// void client_server_management(int confd, params_s * params, addrs_t addr_fpga){
+void client_server_management(int confd, params_s * params){
+    char *r_buff, *s_buff;
+
+    r_buff = malloc(BUFF_SIZE);
+    s_buff = malloc(BUFF_SIZE);
+    
+    if (r_buff == NULL || s_buff == NULL) {
+        perror("Error al reservar memoria");
+        exit(EXIT_FAILURE);
+    }
+
+    memset(r_buff,0,BUFF_SIZE);
+    memset(s_buff,0,BUFF_SIZE);
+
+    sprintf(s_buff,"{\"info\":\"Configuracion actual\"}\n");
+    send(confd, s_buff, BUFF_SIZE, 0);
+
+    memset(s_buff,0,BUFF_SIZE);
+    sprintf(s_buff,"{\"prf\":%d, \"freq\":%d, \"ab\":%d, \"code\":%d, \"code-num\":%d, \"start\":%s}\n",params->prf, params->freq, params->ab, params->code, params->code_num, params->start? "true" : "false");
+    send(confd, s_buff, BUFF_SIZE, 0);
+
+    while(1){
+        if(!(recv(confd, r_buff, BUFF_SIZE, 0) == 0)){
+            if(str_to_json(r_buff, params) == -1){
+                memset(s_buff,0,BUFF_SIZE);
+                strcpy(s_buff,"{\"error\":\"Formato JSON no identificado\"}\n");
+                send(confd, s_buff, BUFF_SIZE, 0);
+            } else {
+                // set_config(addr_fpga, params);
+                memset(s_buff,0,BUFF_SIZE);
+                strcpy(s_buff,"{\"info\":\"Configuracion cargada con exito\"}\n");
+                send(confd, s_buff, BUFF_SIZE, 0);
+            }
+            memset(s_buff,0,BUFF_SIZE);
+            sprintf(s_buff,"{\"prf\":%d, \"freq\":%d, \"ab\":%d, \"code\":%d, \"code-num\":%d, \"start\":%s}\n",params->prf, params->freq, params->ab, params->code, params->code_num, params->start? "true" : "false");
+            send(confd, s_buff, BUFF_SIZE, 0);
+        } else {
+            break;
+        }
+    }
+
+    free(r_buff);
+    free(s_buff);
+}
+
 /*==================[external functions definition]==========================*/
 
 int main() {
     struct sockaddr_in client, server;
     int lfd, confd, n;
-    char *r_buff, *s_buff;
+    params_s *params_p = malloc(sizeof(*params_p));
 
-    params_s sent_params = {0};
-    params_s *sent_params_p = &sent_params;
+    memset(params_p, 0, sizeof(*params_p));
 
-    r_buff = malloc(BUFF_SIZE);
-    s_buff = malloc(BUFF_SIZE);
+    //Inicializo valores por defecto
+    params_p->ab = DEFAULT_AB;
+    params_p->code = DEFAULT_CODE;
+    params_p->code_num = DEFAULT_CODE_NUM;
+    params_p->freq = DEFAULT_FREQ;
+    params_p->prf = DEFAULT_PRF;
+    params_p->start = DEFAULT_START;
 
-    memset(r_buff,0,BUFF_SIZE);
-    memset(s_buff,0,BUFF_SIZE);
+    memset(&server, 0, sizeof(server));
+    memset(&client, 0, sizeof(client));
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
     // Realiza mapeo de memoria
     // addrs_t addr_fpga = mapping_initialize(FPGA_ADDRS, FPGA_REG);
     // if (addr_fpga == NULL) {
     //     return -1;
     // }
-    // printf("\n\n\nMapeo de memoria realizo con exito...\n");
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    //Seteo valores por defecto
+    // set_config(addr_fpga,params_p);
 
     //Crea y vincula el socket - Servidor
     lfd = socket(AF_INET, SOCK_STREAM, 0); 
+    if (lfd == -1) {
+        perror("Error al crear el socket");
+        exit(EXIT_FAILURE);
+    }
+
     server.sin_family = AF_INET;
-    server.sin_port = PORT;
+    server.sin_port = htons(PORT);
     server.sin_addr.s_addr = inet_addr(IP);
 
-    bind(lfd, (struct sockaddr *)&server, sizeof server);
-    listen(lfd, 1);
+    if (bind(lfd, (struct sockaddr *)&server, sizeof(server)) == -1) {
+        perror("Error al vincular el socket");
+        exit(EXIT_FAILURE);
+    }
 
-    n = sizeof client;
-    confd = accept(lfd, (struct sockaddr *)&client, &n);
+    if (listen(lfd, 2) == -1) {
+        perror("Error al poner en escucha el socket");
+        exit(EXIT_FAILURE);
+    }
 
     while(1){
-        recv(confd, r_buff, BUFF_SIZE, 0);
-
-        if(str_to_json(r_buff, sent_params_p) == -1){
-            memset(s_buff,0,BUFF_SIZE);
-            strcpy(s_buff,"{\"error\":\"Formato JSON no identificado\"}\n");
-            send(confd, s_buff, BUFF_SIZE, 0);
-        } else {
-            // upload_config(addr_fpga, sent_params_p);
-            memset(s_buff,0,BUFF_SIZE);
-            strcpy(s_buff,"{\"info\":\"Configuracion cargada con exito\"}\n");
-            send(confd, s_buff, BUFF_SIZE, 0);
+        n = sizeof(client);
+        confd = accept(lfd, (struct sockaddr *)&client, &n);
+        if (confd < 0) { 
+            exit(0); 
         }
-
-        memset(s_buff,0,BUFF_SIZE);
-        sprintf(s_buff,"{\"prf\":%d, \"freq\":%d, \"ab\":%d, \"code\":%d, \"code-num\":%d, \"start\":%d}\n",sent_params_p->prf, sent_params_p->freq, sent_params_p->ab, sent_params_p->code, sent_params_p->code_num, sent_params_p->start);
-
-        send(confd, s_buff, BUFF_SIZE, 0);
+        client_server_management(confd, params_p);
+        close(confd);
     }
 
     // mapping_finalize(addr_fpga, FPGA_REG);
-    free(r_buff);
-    free(s_buff);
+    free(params_p);
     close(confd);
     close(lfd);
     return 0;

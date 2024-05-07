@@ -14,10 +14,6 @@
 #include <unistd.h>
 #include <pthread.h>
 /*==================[macros and definitions]=================================*/
-// #define PRF  50
-// #define AB   5000
-// #define FREQ 10000000
-
 #define IP  "127.0.0.1"
 #define PORT 2000
 
@@ -54,6 +50,42 @@ void code_manager(params_s * config, const char * code);
 /*==================[external data definition]===============================*/
 
 /*==================[internal functions definition]==========================*/
+int update_params(char *str, params_s * params){
+    struct json_object *parsed_json;
+    struct json_object *prf;
+    struct json_object *freq;
+    struct json_object *ab;
+    struct json_object *code;
+    struct json_object *code_num;
+    struct json_object *start;
+
+    parsed_json = json_tokener_parse(str);
+    if(parsed_json != NULL){
+        json_object_object_get_ex(parsed_json, "prf", &prf);
+        params->prf = prf != NULL ? json_object_get_int(prf) : params->prf;
+
+        json_object_object_get_ex(parsed_json, "freq", &freq);
+        params->freq = freq != NULL ? json_object_get_int(freq) : params->freq;
+
+        json_object_object_get_ex(parsed_json, "ab", &ab);
+        params->ab = ab != NULL ? json_object_get_int(ab) : params->ab;
+
+        json_object_object_get_ex(parsed_json, "code", &code);
+        params->code = code != NULL ? json_object_get_int(code) : params->code;
+
+        json_object_object_get_ex(parsed_json, "code-num", &code_num);
+        params->code_num = code_num != NULL ? json_object_get_int(code_num) : params->code_num;
+
+        json_object_object_get_ex(parsed_json, "start", &start);
+        params->start = start != NULL ? json_object_get_int(start) : params->start;
+
+        return 0;
+
+    } else {
+        return -1;
+    }
+}
+
 int str_to_json(char *str, params_s * params){
     struct json_object *parsed_json;
     struct json_object *prf;
@@ -109,10 +141,12 @@ void * recive_msg(void * args){
     thread_args * arg = args;
     char *buff = arg->r_buff;
     int soc_d = *(arg->soc);
+    params_s * params = arg->params;
 
     while(1){
         memset(buff,0,BUFF_SIZE);
         recv(soc_d, buff, BUFF_SIZE, 0);
+        update_params(buff,params);
         printf("\n[server] %s", buff);
     }
 }
@@ -154,7 +188,7 @@ int main() {
 
     lfd = socket(AF_INET, SOCK_STREAM, 0);
     server.sin_family = AF_INET;
-    server.sin_port = PORT;
+    server.sin_port = htons(PORT);
     server.sin_addr.s_addr = inet_addr(IP);
 
     connect(lfd, (struct sockaddr *)&server, sizeof server);
