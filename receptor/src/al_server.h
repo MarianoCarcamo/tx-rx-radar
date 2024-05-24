@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdint.h>
 /*==================[macros]=================================================*/
-#define PORT_TX     5566
+#define PORT_TX     8080
 #define IP_TX       "0.0.0.0"
 #define BUFTCP_SIZE 128
 /*==================[typedef]================================================*/
