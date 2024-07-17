@@ -18,15 +18,18 @@
 #define EXT_ERR_CREATE_SERVER  1
 #define EXT_ERR_CLIENT_CONNECT 2
 #define EXT_ERR_LISTENING_SOCK 3
+#define EXT_ERR_GETTING_ID      4
 
-#define ID          "rx_rpf098f4"
-#define PORT_SERVER 2027
+// #define ID          "rx_rpf098f4"
+#define DEFAULT_PORT_SERVER 2027
 #define IP_SERVER   "0.0.0.0"
 #define BUFTCP_SIZE 1024
 /*==================[internal data declaration]==============================*/
-
+static char id [20];
+static int port_server;
 /*==================[internal functions declaration]=========================*/
 static void MySignalHandler(int sig);
+static void cmdArguments(int argc, char ** argv);
 static void initConfigRx(fpgarx_t mem, params_t config);
 static void setConfigRx(fpgarx_t mem, params_t config);
 
@@ -45,6 +48,44 @@ static void initConfigRx(fpgarx_t mem, params_t config) {
     mem->addrReset       = 0;
     mem->writeEn         = 3;
     mem->start           = config->start;
+}
+static void cmdArguments(int argc, char ** argv) {
+    int c;
+    int digit_optind = 0;
+    int port_flag = 0, id_flag = 0; 
+
+    while ((c = getopt(argc, argv, "p:i:")) != -1) {
+        int this_option_optind = optind ? optind : 1;
+        switch (c) {
+            case 'p':
+                port_flag = 1;
+                port_server = atoi(optarg);
+                break;
+            case 'i':
+                id_flag = 1;
+                strcpy(id,optarg);
+                break;
+            case '?':
+                printf("The only valid options are:\n-p: To indicate the port number\n-i: To indicate the Board ID\n");
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (optind < argc) {
+        printf ("non-option ARGV-elements: ");
+        printf ("\n");
+    }
+
+    if(!id_flag){
+        printf("ID (-i BoardID) argument is required\n");
+        exit(EXT_ERR_GETTING_ID);
+    }
+
+    if(!port_flag){
+        port_server = DEFAULT_PORT_SERVER;
+    }
 }
 static void setConfigRx(fpgarx_t mem, params_t config) {
     uint32_t phase_value = ceil((config->freq * 1e9) / 28610229);
@@ -65,7 +106,7 @@ static void dataManagement(server_t sv, params_t params, fpgarx_t mem) {
     memset(r_buff, 0, BUFTCP_SIZE);
     memset(s_buff, 0, BUFTCP_SIZE);
 
-    sprintf(s_buff, "{\"%s\"}", ID);
+    sprintf(s_buff, "{\"%s\"}", id);
     serverSend(sv, s_buff, BUFTCP_SIZE);
 
     while (1) {
@@ -104,9 +145,9 @@ static void MySignalHandler(int sig) {
 }
 
 /*==================[external functions definition]==========================*/
-int main() {
+int main(int argc, char **argv) {
     log_delete();
-
+    cmdArguments(argc,argv);
     // Mapeo de memoria...
     fpgarx = (fpgarx_t)mappingInit(FPGARX_ADDR, FPGARX_REGS);
     if (fpgarx == NULL) {
@@ -116,7 +157,7 @@ int main() {
     initConfigRx(fpgarx, params);
 
     // Creacion del server...
-    server = serverCreate(PORT_SERVER, IP_SERVER);
+    server = serverCreate(port_server, IP_SERVER);
     if (server == NULL) {
         log_add("[ERROR]Error al crear el server...");
         exit(EXT_ERR_CREATE_SERVER);
